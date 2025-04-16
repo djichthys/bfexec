@@ -6,8 +6,8 @@ pub enum BF_ISA {
     In,
     MvRight,
     MvLeft,
-    Jmp,
-    Ret
+    Jmp(usize), 
+    Ret(usize),
 }
 
 pub struct Program_State { 
@@ -56,42 +56,14 @@ impl Program_State {
                 }, 
                 BF_ISA::MvRight => self.ptr = (self.ptr+1) % self.heap.len(), 
                 BF_ISA::MvLeft => self.ptr = (self.ptr + self.heap.len() - 1) % self.heap.len(),
-                BF_ISA::Jmp => { 
+                BF_ISA::Jmp(target) => { 
                     if self.heap[self.ptr] == 0 { 
-                        let mut nesting = 1; 
-                        loop { 
-                            if self.pc + 1 == self.txt.len() { 
-                                break 'program; 
-                            } 
-                            self.pc += 1; 
-                            nesting += match self.txt[self.pc] { 
-                                BF_ISA::Jmp => 1,
-                                BF_ISA::Ret => -1, 
-                                _ => 0, 
-                            }; 
-                            if nesting == 0 { 
-                                break; 
-                            } 
-                        }
+                        self.pc = target; 
                     }
                 },
-                BF_ISA::Ret => { 
+                BF_ISA::Ret(target) => { 
                     if self.heap[self.ptr] != 0 { 
-                        let mut nesting = 1; 
-                        loop { 
-                            if self.pc == 0 { 
-                                break 'program; 
-                            } 
-                            self.pc -= 1; 
-                            nesting += match self.txt[self.pc] { 
-                                BF_ISA::Jmp => -1,
-                                BF_ISA::Ret => 1, 
-                                _ => 0, 
-                            }; 
-                            if nesting == 0 { 
-                                break; 
-                            } 
-                        }
+                        self.pc = target; 
                     }
                 }
             }
