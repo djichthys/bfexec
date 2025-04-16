@@ -1,7 +1,7 @@
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum BF_ISA { 
-    Incr, 
-    Decr, 
+    Incr,
+    Decr,
     Out,
     In,
     MvRight,
@@ -10,6 +10,8 @@ pub enum BF_ISA {
     Ret(usize),
 }
 
+pub struct NestingErr(&'static str, usize);
+
 pub struct Program_State { 
     ptr:  usize,
     pc:   usize,
@@ -17,8 +19,44 @@ pub struct Program_State {
     txt:  Vec<BF_ISA>
 }
 
+
 impl Program_State { 
-    pub fn new(src: &[u8], heap_sz: usize) -> Program_State { 
+    pub fn new(src: &[u8], heap_sz: usize) -> Result<Program_State, NestingErr> { 
+        let mut code = Vec::new();
+        let mut nest_stk = Vec::new();
+
+        for (pos, byte) in src.iter().enumerate() {
+            let instr = match byte { 
+                b'+' => BF_ISA::Incr,
+                b'-' => BF_ISA::Decr,
+                b'.' => BF_ISA::Out,
+                b',' => BF_ISA::In,
+                b'>' => BF_ISA::MvRight,
+                b'<' => BF_ISA::MvLeft,
+                b'[' => { 
+                    nest_stk.push((code.len(), pos));
+                    BF_ISA::Jmp(0)
+                },
+                b']' => { 
+                    if let Some((ret_addr, loc)) = nest_stk.pop() { 
+                        code[ret_addr] = BF_ISA::Jmp(code.len());
+                        BF_ISA::Ret(ret_addr)
+                    } else {
+                        return Err(NestingErr("Nesting Err ] @", pos));
+                    }
+                },
+                _ => {
+                    continue; 
+                }
+            };
+            code.push(instr);
+        }
+
+        if let Some((unpaired_jmp, pos)) = nest_stk.pop() { 
+            return Err(NestingErr("Nesting Err [ @", pos));
+        }
+
+        /*
         let code: Vec<BF_ISA> = src.into_iter().filter_map( |byte| { 
             match byte { 
                 b'+' => Some(BF_ISA::Incr),
@@ -32,13 +70,14 @@ impl Program_State {
                 _    => None 
             }
         }).collect(); 
+        */
 
-        Program_State { 
+        Ok(Program_State { 
             ptr:  0, 
             pc:   0, 
             heap: vec![0; heap_sz], 
-            txt:  code,
-        } 
+            txt:  code 
+        })
     }
 
     pub fn interpret(&mut self) -> Result<i32, &'static str> {

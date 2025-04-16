@@ -2,11 +2,14 @@ use std::env;
 
 
 extern crate interpreter; 
+
 const HEAPSIZE: usize = 2 * 1024; 
 
+type ProgType = Result<interpreter::Program_State, interpreter::NestingErr>;
+
 mod parser {
-    pub fn new_program(bytestream: &[u8], heapsz: usize) -> interpreter::Program_State { 
-        interpreter::Program_State::new(bytestream, heapsz) 
+    pub fn new_program(bytestream: &[u8], heapsz: usize) -> super::ProgType {
+        interpreter::Program_State::new(bytestream, super::HEAPSIZE)
     }
 }
 
@@ -19,15 +22,16 @@ fn main() -> std::io::Result<()> {
     for (itr, arg) in env::args().skip(1).enumerate() {
         //println!("Arg[{}] -> {}", itr, arg);
         let buffer = std::fs::read(&arg)?; 
-        let mut prog = parser::new_program(&buffer, HEAPSIZE);
-        //println!("buffer = {:?}", prog.txt);
+        if let Ok(mut prog) = parser::new_program(&buffer, HEAPSIZE) { 
+            if let Ok(ret) = prog.interpret() { 
+                println!("\n============"); 
+                println!("interpreter returned {}", ret); 
+                println!("================="); 
+            }; 
+            /* Interpret the program */
+            //println!("buffer = {:?}", prog.txt);
+        };
 
-        /* Interpret the program */
-        if let Ok(ret) = prog.interpret() {
-            println!("\n============");
-            println!("interpreter returned {}", ret);
-            println!("=================");
-        }; 
     }
     Ok(())
 }
