@@ -1,11 +1,9 @@
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum BF_ISA { 
-    Incr,
-    Decr,
+    Incr(u8),
     Out,
     In,
-    MvRight,
-    MvLeft,
+    Mv(isize),
     Jmp(usize), 
     Ret(usize),
 }
@@ -27,12 +25,24 @@ impl Program_State {
 
         for (pos, byte) in src.iter().enumerate() {
             let instr = match byte { 
-                b'+' => BF_ISA::Incr,
-                b'-' => BF_ISA::Decr,
+                b'+' | b'-' => { 
+                    let incr = if *byte == b'+' {1} else {1u8.wrapping_neg()}; 
+                    if let Some(BF_ISA::Incr(rhs)) = code.last_mut() { 
+                        *rhs = rhs.wrapping_add(incr);
+                        continue;
+                    }
+                    BF_ISA::Incr(incr)
+                },
                 b'.' => BF_ISA::Out,
                 b',' => BF_ISA::In,
-                b'>' => BF_ISA::MvRight,
-                b'<' => BF_ISA::MvLeft,
+                b'>' | b'<' => {
+                    let incr = if *byte == b'>' {1} else {-1}; 
+                    if let Some(BF_ISA::Mv(curr)) = code.last_mut() {
+                        *curr += incr; 
+                        continue;
+                    }; 
+                    BF_ISA::Mv(incr) 
+                }, 
                 b'[' => { 
                     nest_stk.push((code.len(), pos));
                     BF_ISA::Jmp(0)
@@ -56,22 +66,6 @@ impl Program_State {
             return Err(NestingErr("Nesting Err [ @", pos));
         }
 
-        /*
-        let code: Vec<BF_ISA> = src.into_iter().filter_map( |byte| { 
-            match byte { 
-                b'+' => Some(BF_ISA::Incr),
-                b'-' => Some(BF_ISA::Decr),
-                b'.' => Some(BF_ISA::Out),
-                b',' => Some(BF_ISA::In),
-                b'>' => Some(BF_ISA::MvRight),
-                b'<' => Some(BF_ISA::MvLeft),
-                b'[' => Some(BF_ISA::Jmp),
-                b']' => Some(BF_ISA::Ret),
-                _    => None 
-            }
-        }).collect(); 
-        */
-
         Ok(Program_State { 
             ptr:  0, 
             pc:   0, 
@@ -83,8 +77,7 @@ impl Program_State {
     pub fn interpret(&mut self) -> Result<i32, &'static str> {
         'program: loop { 
             match self.txt[self.pc] { 
-                BF_ISA::Incr => self.heap[self.ptr] = self.heap[self.ptr].wrapping_add(1),
-                BF_ISA::Decr => self.heap[self.ptr] = self.heap[self.ptr].wrapping_sub(1),
+                BF_ISA::Incr(rhs) => self.heap[self.ptr] = self.heap[self.ptr].wrapping_add(rhs), 
                 BF_ISA::Out => print!("{}", self.heap[self.ptr] as char),
                 BF_ISA::In => { 
                     use std::io::Read; 
@@ -93,8 +86,11 @@ impl Program_State {
                         Err(_) => { return Err("Error reading from stdio"); }, 
                     };
                 }, 
-                BF_ISA::MvRight => self.ptr = (self.ptr+1) % self.heap.len(), 
-                BF_ISA::MvLeft => self.ptr = (self.ptr + self.heap.len() - 1) % self.heap.len(),
+                BF_ISA::Mv(disp) => { 
+                    let heapSz = self.heap.len() as isize; 
+                    let disp = (heapSz + (disp % heapSz)) as usize; 
+                    self.ptr = (self.ptr + disp) % heapSz as usize; 
+                }, 
                 BF_ISA::Jmp(target) => { 
                     if self.heap[self.ptr] == 0 { 
                         self.pc = target; 
