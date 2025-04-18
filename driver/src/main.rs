@@ -27,11 +27,15 @@ fn main() -> std::io::Result<()> {
                 println!("\n============"); 
                 println!("interpreter returned {}", ret); 
                 println!("================="); 
+
+                #[cfg(feature="profile")]
+                { 
+                    dbg!(prog.profile);
+                }
             }; 
             /* Interpret the program */
             //println!("buffer = {:?}", prog.txt);
-        };
-
+        }; 
     }
     Ok(())
 }

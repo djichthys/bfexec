@@ -8,14 +8,28 @@ pub enum BF_ISA {
     Ret(usize),
 }
 
+#[derive(Default,Debug)]
+#[cfg(feature = "profile")]
+pub struct Profile { 
+    arith: u64,
+    mv:  u64,
+    inp: u64, 
+    out: u64, 
+    jmp: u64,
+    ret: u64,
+}
+
 pub struct NestingErr(&'static str, usize);
 
 pub struct Program_State { 
     ptr:  usize,
     pc:   usize,
     heap: Vec<u8>, 
-    txt:  Vec<BF_ISA>
+    txt:  Vec<BF_ISA>,
+    #[cfg(feature = "profile")]
+    pub profile: Profile,
 }
+
 
 
 impl Program_State { 
@@ -70,12 +84,29 @@ impl Program_State {
             ptr:  0, 
             pc:   0, 
             heap: vec![0; heap_sz], 
-            txt:  code 
+            txt:  code,
+            #[cfg(feature = "profile")] 
+            profile: Profile::default()
         })
     }
 
     pub fn interpret(&mut self) -> Result<i32, &'static str> {
         'program: loop { 
+            #[cfg(feature = "profile")]
+            {
+                match self.txt[self.pc] { 
+                    BF_ISA::Incr(_) => self.profile.arith += 1,
+                    BF_ISA::Out => self.profile.out += 1,
+                    BF_ISA::In => self.profile.inp += 1,
+                    BF_ISA::Mv(_) => self.profile.mv += 1,
+                    BF_ISA::Jmp(_) => self.profile.jmp += 1,
+                    BF_ISA::Ret(_) => self.profile.ret += 1,
+                }
+                    
+            }
+
+
+
             match self.txt[self.pc] { 
                 BF_ISA::Incr(rhs) => self.heap[self.ptr] = self.heap[self.ptr].wrapping_add(rhs), 
                 BF_ISA::Out => print!("{}", self.heap[self.ptr] as char),
