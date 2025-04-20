@@ -11,12 +11,13 @@ pub enum BF_ISA {
 #[derive(Default,Debug)]
 #[cfg(feature = "profile")]
 pub struct Profile { 
-    arith: u64,
-    mv:  u64,
-    inp: u64, 
-    out: u64, 
-    jmp: u64,
-    ret: u64,
+    pub arith: u64,
+    pub mv:  u64,
+    pub inp: u64, 
+    pub out: u64, 
+    pub jmp: u64,
+    pub ret: u64,
+    pub loops: std::collections::HashMap<std::ops::Range<usize>, usize>,
 }
 
 pub struct NestingErr(&'static str, usize);
@@ -25,7 +26,7 @@ pub struct Program_State {
     ptr:  usize,
     pc:   usize,
     heap: Vec<u8>, 
-    txt:  Vec<BF_ISA>,
+    pub txt:  Vec<BF_ISA>,
     #[cfg(feature = "profile")]
     pub profile: Profile,
 }
@@ -62,7 +63,7 @@ impl Program_State {
                     BF_ISA::Jmp(0)
                 },
                 b']' => { 
-                    if let Some((ret_addr, loc)) = nest_stk.pop() { 
+                    if let Some((ret_addr, _loc)) = nest_stk.pop() { 
                         code[ret_addr] = BF_ISA::Jmp(code.len());
                         BF_ISA::Ret(ret_addr)
                     } else {
@@ -76,7 +77,7 @@ impl Program_State {
             code.push(instr);
         }
 
-        if let Some((unpaired_jmp, pos)) = nest_stk.pop() { 
+        if let Some((_unpaired_jmp, pos)) = nest_stk.pop() { 
             return Err(NestingErr("Nesting Err [ @", pos));
         }
 
@@ -100,7 +101,13 @@ impl Program_State {
                     BF_ISA::In => self.profile.inp += 1,
                     BF_ISA::Mv(_) => self.profile.mv += 1,
                     BF_ISA::Jmp(_) => self.profile.jmp += 1,
-                    BF_ISA::Ret(_) => self.profile.ret += 1,
+                    BF_ISA::Ret(addr) => {
+                        self.profile.ret += 1;
+                        *self.profile
+                            .loops
+                            .entry(addr..self.pc+1).
+                            or_default() += 1;
+                    },
                 }
                     
             }
@@ -118,9 +125,9 @@ impl Program_State {
                     };
                 }, 
                 BF_ISA::Mv(disp) => { 
-                    let heapSz = self.heap.len() as isize; 
-                    let disp = (heapSz + (disp % heapSz)) as usize; 
-                    self.ptr = (self.ptr + disp) % heapSz as usize; 
+                    let heap_sz = self.heap.len() as isize; 
+                    let disp = (heap_sz + (disp % heap_sz)) as usize; 
+                    self.ptr = (self.ptr + disp) % heap_sz as usize; 
                 }, 
                 BF_ISA::Jmp(target) => { 
                     if self.heap[self.ptr] == 0 { 
