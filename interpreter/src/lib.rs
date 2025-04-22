@@ -4,6 +4,9 @@ pub enum BF_ISA {
     Out,
     In,
     Mv(isize),
+    LoopSetZero,
+    LoopMvData(isize),
+    LoopMvPtr(isize),
     Jmp(usize), 
     Ret(usize),
 }
@@ -17,6 +20,9 @@ pub struct Profile {
     pub out: u64, 
     pub jmp: u64,
     pub ret: u64,
+    pub loopsetz: u64,
+    pub loopmvptr: u64,
+    pub loopmvdata: u64,
     pub loops: std::collections::HashMap<std::ops::Range<usize>, usize>,
 }
 
@@ -65,7 +71,26 @@ impl Program_State {
                 b']' => { 
                     if let Some((ret_addr, _loc)) = nest_stk.pop() { 
                         code[ret_addr] = BF_ISA::Jmp(code.len());
-                        BF_ISA::Ret(ret_addr)
+
+                        match code.as_slice() { 
+                            [.., BF_ISA::Jmp(_), BF_ISA::Incr(n)] if n % 2 == 1 => {
+                                code.drain(code.len() - 2..); 
+                                BF_ISA::LoopSetZero
+                            }, 
+
+                            &[.., BF_ISA::Jmp(_), BF_ISA::Incr(255), BF_ISA::Mv(pdat), BF_ISA::Incr(1), BF_ISA::Mv(pidx)]
+                                if pdat == pidx => {
+                                    code.drain(code.len() - 5..);
+                                    BF_ISA::LoopMvData(pdat)
+                            },
+
+                            &[.., BF_ISA::Jmp(_), BF_ISA::Mv(pptr)] => {
+                                code.drain(code.len() - 2..);
+                                BF_ISA::LoopMvPtr(pptr)
+                            },
+
+                            _ => BF_ISA::Ret(ret_addr),
+                        }
                     } else {
                         return Err(NestingErr("Nesting Err ] @", pos));
                     }
@@ -108,6 +133,9 @@ impl Program_State {
                             .entry(addr..self.pc+1).
                             or_default() += 1;
                     },
+                    BF_ISA::LoopSetZero => self.profile.loopsetz += 1,
+                    BF_ISA::LoopMvData(_) => self.profile.loopmvdata += 1,
+                    BF_ISA::LoopMvPtr(_) => self.profile.loopmvptr += 1,
                 }
                     
             }
@@ -129,6 +157,28 @@ impl Program_State {
                     let disp = (heap_sz + (disp % heap_sz)) as usize; 
                     self.ptr = (self.ptr + disp) % heap_sz as usize; 
                 }, 
+                BF_ISA::LoopSetZero => { 
+                    self.heap[self.ptr] = 0;
+                },
+                BF_ISA::LoopMvData(n) => { 
+                    let len = self.heap.len() as isize; 
+                    let n = (len + n % len) as usize; 
+                    let to = (self.ptr + n) % len as usize;
+
+                    self.heap[to] = self.heap[to].wrapping_add(self.heap[self.ptr]);
+                    self.heap[self.ptr] = 0;
+                },
+                BF_ISA::LoopMvPtr(n) => { 
+                    let len = self.heap.len() as isize; 
+                    let n = (len + n % len) as usize; 
+                    loop { 
+                        if self.heap[self.ptr] == 0 {
+                            break;
+                        }
+                        self.ptr = (self.ptr + n) % len as usize;
+                    }
+
+                },
                 BF_ISA::Jmp(target) => { 
                     if self.heap[self.ptr] == 0 { 
                         self.pc = target; 

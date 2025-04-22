@@ -61,6 +61,22 @@ fn main() -> std::io::Result<()> {
                                 interpreter::BF_ISA::Out => ".".to_string(),
                                 interpreter::BF_ISA::Jmp(_) => "[".to_string(),
                                 interpreter::BF_ISA::Ret(_) => "]".to_string(),
+                                interpreter::BF_ISA::LoopSetZero => "x".to_string(),
+                                interpreter::BF_ISA::LoopMvData(n) => {
+                                    if *n < 0 { 
+                                        format!("+<{}", -n)
+                                    } else {
+                                        format!("+>{}", n)
+                                    }
+                                },
+                                interpreter::BF_ISA::LoopMvPtr(n) => {
+                                    if *n < 0 { 
+                                        format!("<<{}", -n)
+                                    } else {
+                                        format!(">>{}", n)
+                                    }
+
+                                },
                             })
                             .fold(String::new(), |a,b| a + &b)
                     };
