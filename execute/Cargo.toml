@@ -3,7 +3,10 @@ name = "execute"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-
 [features]
 profile = []
+
+[dependencies]
+cranelift = "0.119.0"
+memmap2 = "0.9.5"
+target-lexicon = "0.13.2"
