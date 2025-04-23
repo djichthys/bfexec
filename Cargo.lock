@@ -6,9 +6,9 @@ version = 4
 name = "driver"
 version = "0.1.0"
 dependencies = [
- "interpreter",
+ "execute",
 ]
 
 [[package]]
-name = "interpreter"
+name = "execute"
 version = "0.1.0"

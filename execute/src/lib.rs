@@ -1,5 +1,5 @@
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum BF_ISA { 
+pub enum BFIsa { 
     Incr(u8),
     Out,
     In,
@@ -28,19 +28,19 @@ pub struct Profile {
 
 pub struct NestingErr(&'static str, usize);
 
-pub struct Program_State { 
+pub struct ProgramState { 
     ptr:  usize,
     pc:   usize,
     heap: Vec<u8>, 
-    pub txt:  Vec<BF_ISA>,
+    pub txt:  Vec<BFIsa>,
     #[cfg(feature = "profile")]
     pub profile: Profile,
 }
 
 
 
-impl Program_State { 
-    pub fn new(src: &[u8], heap_sz: usize) -> Result<Program_State, NestingErr> { 
+impl ProgramState { 
+    pub fn new(src: &[u8], heap_sz: usize) -> Result<ProgramState, NestingErr> { 
         let mut code = Vec::new();
         let mut nest_stk = Vec::new();
 
@@ -48,48 +48,48 @@ impl Program_State {
             let instr = match byte { 
                 b'+' | b'-' => { 
                     let incr = if *byte == b'+' {1} else {1u8.wrapping_neg()}; 
-                    if let Some(BF_ISA::Incr(rhs)) = code.last_mut() { 
+                    if let Some(BFIsa::Incr(rhs)) = code.last_mut() { 
                         *rhs = rhs.wrapping_add(incr);
                         continue;
                     }
-                    BF_ISA::Incr(incr)
+                    BFIsa::Incr(incr)
                 },
-                b'.' => BF_ISA::Out,
-                b',' => BF_ISA::In,
+                b'.' => BFIsa::Out,
+                b',' => BFIsa::In,
                 b'>' | b'<' => {
                     let incr = if *byte == b'>' {1} else {-1}; 
-                    if let Some(BF_ISA::Mv(curr)) = code.last_mut() {
+                    if let Some(BFIsa::Mv(curr)) = code.last_mut() {
                         *curr += incr; 
                         continue;
                     }; 
-                    BF_ISA::Mv(incr) 
+                    BFIsa::Mv(incr) 
                 }, 
                 b'[' => { 
                     nest_stk.push((code.len(), pos));
-                    BF_ISA::Jmp(0)
+                    BFIsa::Jmp(0)
                 },
                 b']' => { 
                     if let Some((ret_addr, _loc)) = nest_stk.pop() { 
-                        code[ret_addr] = BF_ISA::Jmp(code.len());
+                        code[ret_addr] = BFIsa::Jmp(code.len());
 
                         match code.as_slice() { 
-                            [.., BF_ISA::Jmp(_), BF_ISA::Incr(n)] if n % 2 == 1 => {
+                            [.., BFIsa::Jmp(_), BFIsa::Incr(n)] if n % 2 == 1 => {
                                 code.drain(code.len() - 2..); 
-                                BF_ISA::LoopSetZero
+                                BFIsa::LoopSetZero
                             }, 
 
-                            &[.., BF_ISA::Jmp(_), BF_ISA::Incr(255), BF_ISA::Mv(pdat), BF_ISA::Incr(1), BF_ISA::Mv(pidx)]
+                            &[.., BFIsa::Jmp(_), BFIsa::Incr(255), BFIsa::Mv(pdat), BFIsa::Incr(1), BFIsa::Mv(pidx)]
                                 if pdat == pidx => {
                                     code.drain(code.len() - 5..);
-                                    BF_ISA::LoopMvData(pdat)
+                                    BFIsa::LoopMvData(pdat)
                             },
 
-                            &[.., BF_ISA::Jmp(_), BF_ISA::Mv(pptr)] => {
+                            &[.., BFIsa::Jmp(_), BFIsa::Mv(pptr)] => {
                                 code.drain(code.len() - 2..);
-                                BF_ISA::LoopMvPtr(pptr)
+                                BFIsa::LoopMvPtr(pptr)
                             },
 
-                            _ => BF_ISA::Ret(ret_addr),
+                            _ => BFIsa::Ret(ret_addr),
                         }
                     } else {
                         return Err(NestingErr("Nesting Err ] @", pos));
@@ -106,7 +106,7 @@ impl Program_State {
             return Err(NestingErr("Nesting Err [ @", pos));
         }
 
-        Ok(Program_State { 
+        Ok(ProgramState { 
             ptr:  0, 
             pc:   0, 
             heap: vec![0; heap_sz], 
@@ -121,21 +121,21 @@ impl Program_State {
             #[cfg(feature = "profile")]
             {
                 match self.txt[self.pc] { 
-                    BF_ISA::Incr(_) => self.profile.arith += 1,
-                    BF_ISA::Out => self.profile.out += 1,
-                    BF_ISA::In => self.profile.inp += 1,
-                    BF_ISA::Mv(_) => self.profile.mv += 1,
-                    BF_ISA::Jmp(_) => self.profile.jmp += 1,
-                    BF_ISA::Ret(addr) => {
+                    BFIsa::Incr(_) => self.profile.arith += 1,
+                    BFIsa::Out => self.profile.out += 1,
+                    BFIsa::In => self.profile.inp += 1,
+                    BFIsa::Mv(_) => self.profile.mv += 1,
+                    BFIsa::Jmp(_) => self.profile.jmp += 1,
+                    BFIsa::Ret(addr) => {
                         self.profile.ret += 1;
                         *self.profile
                             .loops
                             .entry(addr..self.pc+1).
                             or_default() += 1;
                     },
-                    BF_ISA::LoopSetZero => self.profile.loopsetz += 1,
-                    BF_ISA::LoopMvData(_) => self.profile.loopmvdata += 1,
-                    BF_ISA::LoopMvPtr(_) => self.profile.loopmvptr += 1,
+                    BFIsa::LoopSetZero => self.profile.loopsetz += 1,
+                    BFIsa::LoopMvData(_) => self.profile.loopmvdata += 1,
+                    BFIsa::LoopMvPtr(_) => self.profile.loopmvptr += 1,
                 }
                     
             }
@@ -143,24 +143,24 @@ impl Program_State {
 
 
             match self.txt[self.pc] { 
-                BF_ISA::Incr(rhs) => self.heap[self.ptr] = self.heap[self.ptr].wrapping_add(rhs), 
-                BF_ISA::Out => print!("{}", self.heap[self.ptr] as char),
-                BF_ISA::In => { 
+                BFIsa::Incr(rhs) => self.heap[self.ptr] = self.heap[self.ptr].wrapping_add(rhs), 
+                BFIsa::Out => print!("{}", self.heap[self.ptr] as char),
+                BFIsa::In => { 
                     use std::io::Read; 
                     let _ = match std::io::stdin().read_exact(&mut self.heap[self.ptr..self.ptr+1]) { 
                         Ok(()) => 0, 
                         Err(_) => { return Err("Error reading from stdio"); }, 
                     };
                 }, 
-                BF_ISA::Mv(disp) => { 
+                BFIsa::Mv(disp) => { 
                     let heap_sz = self.heap.len() as isize; 
                     let disp = (heap_sz + (disp % heap_sz)) as usize; 
                     self.ptr = (self.ptr + disp) % heap_sz as usize; 
                 }, 
-                BF_ISA::LoopSetZero => { 
+                BFIsa::LoopSetZero => { 
                     self.heap[self.ptr] = 0;
                 },
-                BF_ISA::LoopMvData(n) => { 
+                BFIsa::LoopMvData(n) => { 
                     let len = self.heap.len() as isize; 
                     let n = (len + n % len) as usize; 
                     let to = (self.ptr + n) % len as usize;
@@ -168,7 +168,7 @@ impl Program_State {
                     self.heap[to] = self.heap[to].wrapping_add(self.heap[self.ptr]);
                     self.heap[self.ptr] = 0;
                 },
-                BF_ISA::LoopMvPtr(n) => { 
+                BFIsa::LoopMvPtr(n) => { 
                     let len = self.heap.len() as isize; 
                     let n = (len + n % len) as usize; 
                     loop { 
@@ -179,12 +179,12 @@ impl Program_State {
                     }
 
                 },
-                BF_ISA::Jmp(target) => { 
+                BFIsa::Jmp(target) => { 
                     if self.heap[self.ptr] == 0 { 
                         self.pc = target; 
                     }
                 },
-                BF_ISA::Ret(target) => { 
+                BFIsa::Ret(target) => { 
                     if self.heap[self.ptr] != 0 { 
                         self.pc = target; 
                     }
