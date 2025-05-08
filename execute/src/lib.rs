@@ -14,8 +14,7 @@ use cranelift::{
 use target_lexicon::Triple;
 use memmap2;
 use std::io::{Read,Write};
-
-
+use std::time::{Duration, Instant}; 
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum BFIsa { 
@@ -141,7 +140,8 @@ impl ProgramState {
         })
     }
 
-    pub fn interpret(&mut self) -> Result<i32, &'static str> {
+    pub fn interpret(&mut self) -> Result<(i32,Duration), &'static str> {
+        let bm_start = Instant::now(); 
         'program: loop { 
             #[cfg(feature = "profile")]
             {
@@ -164,7 +164,6 @@ impl ProgramState {
                 }
                     
             }
-
 
 
             match self.txt[self.pc] { 
@@ -222,7 +221,7 @@ impl ProgramState {
                 break 'program;
             }
         }
-        Ok(0)
+        Ok((0, bm_start.elapsed()))
     }
 
     pub fn jit_compile(&mut self, clir: bool) -> Result<i32, JitErr> {
@@ -482,11 +481,11 @@ impl ProgramState {
     }
 
 
-    pub fn jit_exec(&mut self, clir: bool) -> Result<i32, JitErr> {
+    pub fn jit_exec(&mut self, clir: bool) -> Result<(i32, Duration), JitErr> {
         let code = match &self.jit_txt {
             Some(code_txt) => code_txt,
             None => { 
-                return Ok(0); 
+                return Ok((0, Duration::ZERO)); 
             },
         }; 
 
@@ -497,13 +496,15 @@ impl ProgramState {
 
         buff.copy_from_slice(code);
         let buff = buff.make_exec().unwrap();
+
+        let bm_start = Instant::now(); 
         unsafe { 
             let jit_fn : unsafe extern "C" fn(*mut u8) -> *mut usize = 
                 std::mem::transmute(buff.as_ptr());
             let error = jit_fn(self.heap.as_mut_ptr());
-            return Ok(error as i32);
+            return Ok((error as i32, bm_start.elapsed()));
         }
-        Ok(0)
+        Ok((-1, bm_start.elapsed()))
     }
 
 }

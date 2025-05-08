@@ -113,15 +113,16 @@ fn main() -> std::io::Result<()> {
         };
 
         /* Execute using user selected execution engine */
-        if let Ok(ret) = match cmdline_opts.exec_engine { 
-            ExecutionEngine::Interpreter => prog.interpret(),
+        if let Ok((ret, elapsed)) = match cmdline_opts.exec_engine { 
+            ExecutionEngine::Interpreter => prog.interpret(), 
             ExecutionEngine::CraneLift => {
                 prog.jit_compile(cmdline_opts.clir).or_else(|x| Err("Jit Compilation Error"));
                 prog.jit_exec(cmdline_opts.clir).map_err(|x| "Jit execution error")
             }, 
         } { 
             println!("\n============"); 
-            println!("prog[{}][{} <{:?}>] returned {}", itr, arg, cmdline_opts.exec_engine, ret); 
+            println!("prog[{}][{} <{:?}>] returned {}, elapsed-time = {:?}"
+                        , itr, arg, cmdline_opts.exec_engine, ret, elapsed); 
             println!("================="); 
 
             #[cfg(feature="profile")]
@@ -195,7 +196,7 @@ fn main() -> std::io::Result<()> {
                     println!("{:10}: {}", count, code); 
                 }
             }
-            }; 
+        }; 
     }
     Ok(())
 }
